@@ -1,0 +1,29 @@
+Section,Grade,Course,Includes Lab
+Sequence,9,Biology CP,Yes
+Sequence,9,Biology Honors,Yes
+Sequence,10-12,Chemistry CP,Yes
+Sequence,10-12,Chemistry Honors,Yes
+Sequence,10-12,Enviro CP,Yes
+Sequence,10-12,Enviro Honors,Yes
+Sequence,10-12,AP Enviro,Yes
+Sequence,10-12,Physics CP,Yes
+Sequence,10-12,AP Physics 1,Yes
+Electives,,AP Biology,Yes
+Electives,,AP Environmental Science,Yes
+Electives,,Forensic Science,Yes
+Electives,,Dynamics of Healthcare in Society,Yes
+Electives,,The Human Body,Yes
+Electives,,Astronomy (S),Yes
+Electives,,Natural Disasters (S),Yes
+Electives,,Natural Resources & Ecology,Yes
+Electives,,AP Chemistry,Yes
+Electives,,AP Physics 2,Yes
+Electives,,AP Physics C: Mechanisms,Yes
+Electives,,AP Physics C: E & M,Yes
+Electives,,Biotechnology 1,Yes
+Electives,,Sustainability Science,Yes
+Electives,,Astronomy,Yes
+Electives,,Organic Chemistry (S),Yes
+Three Year Research,,Introduction to Research Methods Honors,No
+Three Year Research,,Intermediate Science Research Methods Honors,No
+Three Year Research,,Advanced Science Research Methods (AP),No
