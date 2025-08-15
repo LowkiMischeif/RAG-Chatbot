@@ -1,72 +1,93 @@
+# app.py
 import os
-from flask import Flask, request, jsonify, session
+import logging
+from typing import Any, Dict, List, Optional
+
+from flask import Flask, jsonify, request
 from flask_cors import CORS
-from datetime import timedelta
 
-# Import your backend entrypoint
-from backker import run  # <- matches your file name exactly
-
-app = Flask(__name__)
+# Import your refactored backend (saved as backker.py from my last message)
+import backker  # make sure this file is in the same folder
 
 # ------------------------------------------------------------------------------
-# Config
+# App factory
 # ------------------------------------------------------------------------------
-app.secret_key = os.environ.get("FLASK_SECRET_KEY", "dev-secret-change-me")
-app.permanent_session_lifetime = timedelta(days=1)
+def create_app() -> Flask:
+    app = Flask(__name__)
 
-# Local dev cookie settings (relax for http://localhost)
-app.config.update(
-    SESSION_COOKIE_HTTPONLY=True,
-    SESSION_COOKIE_SAMESITE="Lax",
-    SESSION_COOKIE_SECURE=False,  # set True only when serving over HTTPS
-)
+    # CORS: allow your Vite dev server (or everything via env)
+    cors_origins = os.getenv("CORS_ORIGINS", "*")
+    CORS(app, resources={r"/api/*": {"origins": cors_origins}})
 
-# Allow your React dev server(s) and send cookies
-CORS(
-    app,
-    resources={r"/api/*": {"origins": ["http://localhost:5173", "http://localhost:3000"]}},
-    supports_credentials=True,
-)
+    # Logging
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(name)s ─ %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+    app.logger.setLevel(logging.INFO)
 
-# ------------------------------------------------------------------------------
-# Routes
-# ------------------------------------------------------------------------------
+    # Initialize the retriever/chain ONCE per process (fast path on unchanged data)
+    backker.initialize()
 
-@app.route("/", methods=["GET"])
-def health():
-    return jsonify({"status": "ok"}), 200
+    # -------------------------- Routes ----------------------------------------
 
+    @app.get("/healthz")
+    def healthz():
+        return jsonify(status="ok"), 200
 
-@app.route("/api/query", methods=["POST"])
-def query():
-    try:
-        data = request.get_json(silent=True) or {}
-        question = (data.get("question") or "").strip()
+    @app.post("/api/query")
+    def api_query():
+        """
+        Body:
+        {
+          "question": "string",
+          "history": [{"role":"user|assistant","content":"..."}]  // optional
+        }
+        """
+        data: Dict[str, Any] = request.get_json(silent=True) or {}
+        question: str = (data.get("question") or data.get("q") or "").strip()
+        history: Optional[List[Dict[str, str]]] = data.get("history")
+
         if not question:
-            return jsonify({"error": "Missing 'question' in JSON body."}), 400
+            return jsonify(error="Missing 'question'."), 400
 
-        # Initialize / fetch chat history from session
-        if "messages" not in session:
-            session["messages"] = []
+        try:
+            answer = backker.run(question, history)
+            return jsonify(answer=answer), 200
+        except Exception:
+            app.logger.exception("Query failed")
+            return jsonify(error="Internal server error"), 500
 
-        # Append user message
-        session["messages"].append({"role": "user", "content": question})
-        session.modified = True  # ensure cookie is updated
+    @app.post("/api/reindex")
+    def api_reindex():
+        """
+        Rebuild the vector index (use when CSVs change).
+        Protect with a simple header token in production:
+          - Set ADMIN_TOKEN=... in environment
+          - Send header: X-Admin-Token: <token>
+        """
+        expected = os.getenv("ADMIN_TOKEN")
+        provided = request.headers.get("X-Admin-Token")
+        if expected and provided != expected:
+            return jsonify(error="Unauthorized"), 401
 
-        # Call your backend with optional history
-        answer = run(question, history=session["messages"]) or ""
+        try:
+            backker.initialize(force_rebuild=True)
+            return jsonify(status="reindexed"), 200
+        except Exception:
+            app.logger.exception("Reindex failed")
+            return jsonify(error="Reindex failed"), 500
 
-        # Append assistant message
-        session["messages"].append({"role": "assistant", "content": answer})
-        session.modified = True
-
-        return jsonify({"answer": answer}), 200
-
-    except Exception as e:
-        # Don’t leak internals to client; log locally if you want
-        return jsonify({"error": "Internal server error"}), 500
+    return app
 
 
+# ------------------------------------------------------------------------------
+# Dev entrypoint
+# ------------------------------------------------------------------------------
 if __name__ == "__main__":
-    # Run on 5001 to avoid conflicts with other local services
-    app.run(host="0.0.0.0", port=5001, debug=True)
+    app = create_app()
+    host = os.getenv("HOST", "0.0.0.0")
+    port = int(os.getenv("PORT", "5001"))
+    debug = os.getenv("FLASK_DEBUG", "0") == "1"
+    app.run(host=host, port=port, debug=debug)
