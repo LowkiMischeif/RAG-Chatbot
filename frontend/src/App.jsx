@@ -1,88 +1,83 @@
-// ----------------------------------------------------------------
-// App.jsx — integrated with ChatBotWidget from "chatbot-widget-ui"
-// ----------------------------------------------------------------
-import React, { useState } from "react";
-import { ChatBotWidget } from "chatbot-widget-ui";
+import React, { useEffect, useRef, useState } from "react";
+import ChatbotIcon from "./components/ChatbotIcon";
+import ChatForm from "./components/ChatForm";
+import ChatMessage from "./components/ChatMessage";
 
-// Base URL for your Flask backend
-const API_BASE = "http://192.168.1.188:5001";
+const App = () => {
+  const [chatHistory, setChatHistory] = useState([]);
+  const [showChatbot, setshowChatbot] = useState([]);
+  const chatBodyRef = useRef(null);
 
-function App() {
-  // chat history: array of { role: "user" | "assistant", content: string }
-  const [messages, setMessages] = useState([
-    { role: "assistant", content: "Hi there! How can I assist you today?" },
-  ]);
-
-  // 1) API call to your backend with error handling
-  const customApiCall = async (userMsg) => {
-    try {
-      const res = await fetch(`${API_BASE}/api/query`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question: userMsg }),
-      });
-
-      // Handle non-2xx status codes
-      if (!res.ok) {
-        const errData = await res.json();
-        throw new Error(errData.error || `Server error: ${res.status}`);
-      }
-
-      const data = await res.json();
-      // Ensure the answer is always a string for React rendering
-      if (typeof data.answer === "object" && data.answer !== null) {
-        // Try to extract a useful string, fallback to JSON
-        return data.answer.result || JSON.stringify(data.answer);
-      }
-      return data.answer;
-    } catch (error) {
-      console.error("API call error:", error);
-      throw error;
+  const generateBotResponse = async (history) => {
+    // Get the latest user message
+    const updateHistory = (text) => {
+      setChatHistory((prev) => [...prev.filter((msg) => msg.text !== "Thinking..."), { role: "model", text }]);
     }
+
+  // Get the latest user message text
+  const lastUserMessage = history.filter(msg => msg.role === 'user').pop()?.text || '';
+
+  const requestOptions = {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ question: lastUserMessage })
   };
 
-  // 2) handle a new outgoing message (from user)
-  const handleNewMessage = (msg) => {
-    setMessages((prev) => [...prev, msg]);
+  try {
+    const response = await fetch('http://localhost:5001/api/query', requestOptions);
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'Something went wrong');
+
+    const apiResponseText = (data.answer || '').trim();
+    updateHistory(apiResponseText);
+  } catch (error) {
+    console.log(error.message, true);
+  }
   };
 
-  // 3) handle incoming bot response
-  const handleBotResponse = (reply) => {
-    setMessages((prev) => [
-      ...prev,
-      { role: "assistant", content: reply },
-    ]);
-  };
+  useEffect(() => {
+    if (chatBodyRef.current) {
+      chatBodyRef.current.scrollTo({top: chatBodyRef.current.scrollHeight, behavior: 'smooth'});
+    }
+}, [chatHistory, chatBodyRef]);
 
-  return (
-    <div style={{ position: "relative", height: "1200vh" }}>
-      <ChatBotWidget
-        callApi={customApiCall}
-        onBotResponse={handleBotResponse}
-        handleNewMessage={handleNewMessage}
-        messages={messages}
-        primaryColor="#33ff96"
-        inputMsgPlaceholder="Type your message..."
-        chatbotName="Quincy"
-        isTypingMessage="Typing..."
-        IncommingErrMsg="Oops! Something went wrong. Try again."
-        chatIcon={<span>💬</span>}
-        botIcon={<span>🤖</span>}
-        botFontStyle={{
-            fontFamily: "Arial",
-            fontSize: "14px",
-            color: "red",
-        }}
-        typingFontStyle={{
-          fontFamily: "Arial",
-          fontSize: "12px",
-          color: "#888",
-          fontStyle: "italic",
-        }}
-        useInnerHTML={false}
-      />
+  return(
+    <div className = {`container ${showChatbot ? 'show-chatbot' : ""}`}>
+      <button onClick={() => setshowChatbot(prev => !prev)} id="chatbot-toggler">
+        <span class="material-symbols-rounded">mode_comment</span>
+        <span className="material-symbols-rounded">close</span>
+      </button>
+      <div className="chatbot-popup">
+        <div className="chat-header">
+          <div className="header-info">
+            <ChatbotIcon />
+            <h2 className="logo-text">Chatbot</h2>
+          </div>
+            <button onClick={() => setshowChatbot(prev => !prev)} className="icon-btn">
+              <span className="material-symbols-rounded">keyboard_arrow_down</span>
+            </button>
+        </div>
+
+        {/* Chatbot body */}
+        <div ref= {chatBodyRef} className="chat-body">
+          <div className="message bot-message">
+            <ChatbotIcon />
+            <p className="message-text">
+              Hey there 👋 <br /> How can I help you today?
+            </p>
+          </div>
+
+          {chatHistory.map((chat, index) => (
+            <ChatMessage key={index} chat={chat} />
+          ))}
+        </div>
+        {/* Chatbot Footer */}
+        <div className="chat-footer">
+          <ChatForm chatHistory = {chatHistory}  setChatHistory={setChatHistory} generateBotResponse={generateBotResponse} />
+        </div>      
+      </div>
     </div>
-  );
+  )         
 }
 
 export default App;
